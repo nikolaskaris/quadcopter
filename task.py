@@ -1,10 +1,11 @@
 import numpy as np
 from physics_sim import PhysicsSim
+from my_functions import Sigmoid
 
 class Task():
     """Task (environment) that defines the goal and provides feedback to the agent."""
     def __init__(self, init_pose=None, init_velocities=None,
-        init_angle_velocities=None, runtime=10., target_pos=None):
+        init_angle_velocities=None, runtime=20., target_pos=None):
         """Initialize a Task object.
         Params
         ======
@@ -21,41 +22,81 @@ class Task():
 
         # state made of current position, velocity and angular velocity
         self.state_size = self.action_repeat * (6 + 3 + 3)
-        self.action_low = 0    # default 0
-        self.action_high = 900 # default 900
+        self.action_low = 300    # default 0
+        self.action_high = 1000 # default 900
         self.action_size = 4   # default 4
 
         # Goal
         self.target_pos = target_pos if target_pos is not None else np.array([0., 0., 10.])
 
-    def get_reward(self):
+    def get_reward(self, old_angular_v, old_v): 
         """Uses current pose of sim to return reward."""
-        reward = 0
-        penalty = 0
-        current_position = self.sim.pose[:3]
-        # penalty for euler angles, we want the takeoff to be stable
-        # penalty += 2*abs(self.sim.pose[3:6]).sum()
         
-        # link velocity to residual distance
-        # penalty += abs(abs(current_position-self.target_pos).sum() - abs(self.sim.v).sum())
+        # Squared distance
+        squared_x_diff = abs(self.sim.pose[0] - np.float32(self.target_pos[0]))**2
+        squared_y_diff = abs(self.sim.pose[1] - np.float32(self.target_pos[1]))**2
+        squared_z_diff = abs(self.sim.pose[2] - np.float32(self.target_pos[2]))**2
         
-        squared_x_diff = abs(current_position[0]-self.target_pos[0])**2
-        squared_y_diff = abs(current_position[1]-self.target_pos[1])**2
-        squared_z_diff = abs(current_position[2]-self.target_pos[2])**2
-        
-        # penalty for distance from target
-        penalty += squared_x_diff + squared_y_diff + 10*squared_z_diff
+        # distance_from_target = Sigmoid(sum(abs(self.sim.pose[:3] - np.float32(self.target_pos))) / 3)
+        # distance_from_target = Sigmoid(np.sqrt(squared_x_diff + squared_y_diff + squared_z_diff))
+        distance_from_target = Sigmoid(sum(abs(self.sim.pose[:3] - np.float32(self.target_pos))) / 3)
 
-        distance = np.sqrt((current_position[0]-self.target_pos[0])**2 + (current_position[1]-self.target_pos[1])**2 + (current_position[2]-self.target_pos[2])**2)
+        # ABS distance
+        # x_distance_from_target = abs(self.sim.pose[0] - np.float32(self.target_pos[0]))
+        # y_distance_from_target = abs(self.sim.pose[1] - np.float32(self.target_pos[1]))
+        # z_distance_from_target = Sigmoid(abs(self.sim.pose[2] - np.float32(self.target_pos[2])))
         
-        # extra reward for flying near the target        
-        reward += (75 - distance) * 10
+        # punish large deltas in euler angles and velocity to produce smooth flight
+        # euler_change = Sigmoid(sum(abs(old_angular_v - self.sim.angular_v)))
+        # velocity_change = Sigmoid(sum(abs(old_v - self.sim.v)))
+        
+        # Reward less and less distance from target
+        reward = 1.0 - distance_from_target
+        
+        # Punish large changes in angular velocity and velocity
+        # reward -= (euler_change + velocity_change)
 
-        # constant reward for flying
-        reward += 100
-        
-        reward = reward - penalty*0.00002
         return reward
+
+#         """Uses current pose of sim to return reward."""
+#         reward = 0
+#         penalty = 0
+        
+#         current_position = self.sim.pose[:3]
+#         # penalty for euler angles, we want the takeoff to be stable
+#         penalty += 2*abs(self.sim.pose[3:6]).sum()
+        
+#         reward -= penalty
+        
+#         # Target height for takeoff
+#         target_z = self.target_pos[2]  # target Z
+#         current_z = self.sim.pose[2]   # current Z
+        
+        
+#         reward += -min(abs(target_z - current_z), 20.0)  # reward = zero for matching target z
+#         if current_z >= target_z:  # agent has crossed the target height
+#             reward += 10.0  # bonus reward
+#             done = True
+            
+        
+
+        
+#         # link velocity to residual distance
+#         # penalty += abs(abs(current_position-self.target_pos).sum() - abs(self.sim.v).sum())
+        
+       
+
+#         distance = np.sqrt(squared_x_diff + squared_y_diff + squared_z_diff)
+        
+#         # penalty for distance from target
+#         penalty += squared_z_diff**0.5
+        
+        
+#         # extra reward for flying near the target 
+#         reward += 1 / distance**0.5
+        
+#         reward =- penalty
+#         return reward
 
 
     def step(self, rotor_speeds):
@@ -63,9 +104,12 @@ class Task():
         reward = 0
         pose_all = []
         for _ in range(self.action_repeat):
+            old_pose = self.sim.pose
+            old_angular_v = self.sim.angular_v
+            old_v = self.sim.v
+            
             done = self.sim.next_timestep(rotor_speeds) # update the sim pose and velocities
-            reward += self.get_reward()
-            state = self.current_state()
+            reward += self.get_reward(old_angular_v, old_v)
             pose_all.append(self.current_state())
         next_state = np.concatenate(pose_all)
         return next_state, reward, done
