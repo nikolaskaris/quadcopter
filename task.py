@@ -5,7 +5,7 @@ from my_functions import Sigmoid
 class Task():
     """Task (environment) that defines the goal and provides feedback to the agent."""
     def __init__(self, init_pose=None, init_velocities=None,
-        init_angle_velocities=None, runtime=20., target_pos=None):
+        init_angle_velocities=None, runtime=5., target_pos=None):
         """Initialize a Task object.
         Params
         ======
@@ -22,8 +22,8 @@ class Task():
 
         # state made of current position, velocity and angular velocity
         self.state_size = self.action_repeat * (6 + 3 + 3)
-        self.action_low = 300    # default 0
-        self.action_high = 1000 # default 900
+        self.action_low = 0    # default 0
+        self.action_high = 900 # default 900
         self.action_size = 4   # default 4
 
         # Goal
@@ -32,31 +32,63 @@ class Task():
     def get_reward(self, old_angular_v, old_v): 
         """Uses current pose of sim to return reward."""
         
-        # Squared distance
-        squared_x_diff = abs(self.sim.pose[0] - np.float32(self.target_pos[0]))**2
-        squared_y_diff = abs(self.sim.pose[1] - np.float32(self.target_pos[1]))**2
-        squared_z_diff = abs(self.sim.pose[2] - np.float32(self.target_pos[2]))**2
+        # Squared distances in x, y, and z
+        x_diff = abs(self.sim.pose[0] - np.float32(self.target_pos[0]))
+        y_diff = abs(self.sim.pose[1] - np.float32(self.target_pos[1]))
+        z_diff = abs(self.sim.pose[2] - np.float32(self.target_pos[2]))
+        squared_x_diff = x_diff**2
+        squared_y_diff = y_diff**2
+        squared_z_diff = z_diff**2
         
-        # distance_from_target = Sigmoid(sum(abs(self.sim.pose[:3] - np.float32(self.target_pos))) / 3)
-        # distance_from_target = Sigmoid(np.sqrt(squared_x_diff + squared_y_diff + squared_z_diff))
-        distance_from_target = Sigmoid(sum(abs(self.sim.pose[:3] - np.float32(self.target_pos))) / 3)
+        distance_from_target = np.sqrt(squared_x_diff + squared_y_diff + squared_z_diff)
+        # Sig Transform
+        dist_sig_transform = Sigmoid(distance_from_target / 100)
+        
+        
+        reward = 0.75 - dist_sig_transform
+        # reward = 1.0 / distance_from_target
+        return reward
+    
 
-        # ABS distance
-        # x_distance_from_target = abs(self.sim.pose[0] - np.float32(self.target_pos[0]))
-        # y_distance_from_target = abs(self.sim.pose[1] - np.float32(self.target_pos[1]))
-        # z_distance_from_target = Sigmoid(abs(self.sim.pose[2] - np.float32(self.target_pos[2])))
         
         # punish large deltas in euler angles and velocity to produce smooth flight
         # euler_change = Sigmoid(sum(abs(old_angular_v - self.sim.angular_v)))
         # velocity_change = Sigmoid(sum(abs(old_v - self.sim.v)))
         
-        # Reward less and less distance from target
-        reward = 1.0 - distance_from_target
+        # Reward approaching target
+        # reward = (1.0 - dist_sig)
         
-        # Punish large changes in angular velocity and velocity
-        # reward -= (euler_change + velocity_change)
+#         if (x_diff < 5) and (y_diff < 5):
+#             reward += 0.1
+#         else:
+#             reward -= 0.2
+        
+        
+#         reward += 0.1 * (1.0 - z_sig)
+        
+#         # Penalize deviation from x and y targets
+#         reward -= 0.01 * ((1 - x_sig) + (1 - y_sig))
+        
+        # reward -= 0.01 * Sigmoid(abs(self.sim.pose[3:6].sum()))
 
-        return reward
+        
+        
+        # Punish large changes in angular velocity and velocity. Encourage steady takeoff etc. Penalize euler angles to encourage 
+        # flight directly upwards. 
+        # reward -= 0.01 * Sigmoid(abs(self.sim.pose[3:6]).sum())
+        
+        # Encourage positive motion in the z-direction
+        # reward += np.exp(-Sigmoid(squared_z_diff))
+        
+        # Encourage flight
+#         if self.sim.pose[2] > 0.00:
+#             reward += 0.2           
+        
+#         # Extra reward for flying close to target
+#         if distance_from_target < 25:
+#             reward += 0.2
+                   
+        ######
 
 #         """Uses current pose of sim to return reward."""
 #         reward = 0
@@ -64,7 +96,7 @@ class Task():
         
 #         current_position = self.sim.pose[:3]
 #         # penalty for euler angles, we want the takeoff to be stable
-#         penalty += 2*abs(self.sim.pose[3:6]).sum()
+
         
 #         reward -= penalty
         
@@ -76,16 +108,9 @@ class Task():
 #         reward += -min(abs(target_z - current_z), 20.0)  # reward = zero for matching target z
 #         if current_z >= target_z:  # agent has crossed the target height
 #             reward += 10.0  # bonus reward
-#             done = True
-            
-        
-
-        
+#             done = True   
 #         # link velocity to residual distance
 #         # penalty += abs(abs(current_position-self.target_pos).sum() - abs(self.sim.v).sum())
-        
-       
-
 #         distance = np.sqrt(squared_x_diff + squared_y_diff + squared_z_diff)
         
 #         # penalty for distance from target
@@ -97,7 +122,6 @@ class Task():
         
 #         reward =- penalty
 #         return reward
-
 
     def step(self, rotor_speeds):
         """Uses action to obtain next state, reward, done."""
