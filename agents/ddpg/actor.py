@@ -29,17 +29,14 @@ class Actor:
         states = layers.Input(shape=(self.state_size,), name='states')
 
         # Add hidden layers
-        net = layers.Dense(units=128, activation='relu')(states)
-        net = layers.BatchNormalization()(net)
-        net = layers.Dense(units=64, activation='relu')(net)
+        net = layers.Dense(units=300,kernel_regularizer=layers.regularizers.l2(1e-6))(states)
+        net = layers.Dense(units=200,kernel_regularizer=layers.regularizers.l2(1e-6))(net)
+        net = layers.Activation("relu")(net)
         net = layers.Dropout(rate=0.1)(net)
-        net = layers.Dense(units=32, activation='relu')(net)
-
-        # Try different layer sizes, activations, add batch normalization, regularizers, etc.
 
         # Add final output layer with sigmoid activation
         raw_actions = layers.Dense(units=self.action_size, activation='sigmoid',
-          name='raw_actions')(net)
+            name='raw_actions',kernel_initializer=layers.initializers.RandomUniform(minval=-0.003, maxval=0.003))(net)
 
         # Scale [0, 1] output for each action dimension to proper range
         actions = layers.Lambda(lambda x: (x * self.action_range) + self.action_low,
@@ -51,8 +48,6 @@ class Actor:
         # Define loss function using action value (Q value) gradients
         action_gradients = layers.Input(shape=(self.action_size,))
         loss = K.mean(-action_gradients * actions)
-
-        # Incorporate any additional losses here (e.g. from regularizers)
 
         # Define optimizer and training function
         optimizer = optimizers.Adam(lr=0.0001)

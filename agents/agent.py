@@ -29,17 +29,17 @@ class DDPG():
         # Noise process
         self.exploration_mu = 0
         self.exploration_theta = 0.15 # same direction
-        self.exploration_sigma = 0.2 # random noise
+        self.exploration_sigma = 0.25 # random noise
         self.noise = OUNoise(self.action_size, self.exploration_mu, self.exploration_theta, self.exploration_sigma)
 
         # Replay memory
-        self.buffer_size = 100000
+        self.buffer_size = 1000000
         self.batch_size = 64
         self.memory = ReplayBuffer(self.buffer_size, self.batch_size)
 
         # Algorithm parameters
-        self.gamma = 0.99  # discount factor
-        self.tau = 0.01  # for soft update of target parameters
+        self.gamma = 0.995  # discount factor
+        self.tau = 0.001  # for soft update of target parameters
 
         # Statistics
         self.best_score = -np.inf
@@ -63,12 +63,7 @@ class DDPG():
 
         # Roll over last state and action
         self.last_state = next_state
-
-        # stats
-        self.score += reward
-        if done:
-            if self.score > self.best_score:
-                self.best_score = self.score
+       
 
     def act(self, states):
         """Returns actions for given state(s) as per current policy."""
